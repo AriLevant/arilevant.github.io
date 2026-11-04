@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN" data-callback-state="idle">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="referrer" content="no-referrer">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+    <script>
+      (function () {
+        var current = new URL(window.location.href);
+        var fragment = new URLSearchParams(current.hash.replace(/^#/, ""));
+        var hasError = current.searchParams.has("error") || fragment.has("error");
+        var hasCode = current.searchParams.has("code") || fragment.has("code");
+        var state = hasError ? "error" : hasCode ? "received" : "idle";
+        try {
+          window.history.replaceState(null, "", current.pathname);
+        } catch (_) {
+          state = "idle";
+        }
+        document.documentElement.dataset.callbackState = state;
+      })();
+    </script>
+    <title>返回 ClipMetric</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%230c2232'/%3E%3Cpath d='M17 14v20l17-10z' fill='%2375e8c0'/%3E%3C/svg%3E">
+    <style>
+      :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; color: #102b3b; background: #eff2ee; }
+      * { box-sizing: border-box; }
+      body { min-height: 100vh; min-height: 100svh; margin: 0; display: grid; place-items: center; padding: 28px 20px; background: radial-gradient(ellipse at 20% 10%, #dceee4 0, transparent 55%), #eff2ee; }
+      main { width: min(100%, 500px); background: #fffefa; border: 1px solid #d9e2dc; border-radius: 24px; padding: 44px; box-shadow: 0 24px 80px #173a2d0d; }
+      .brand { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 700; letter-spacing: -.7px; }
+      .mark { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: #102b3b; }
+      .mark::before { content: ""; width: 0; height: 0; border-left: 12px solid #7de6bf; border-top: 8px solid transparent; border-bottom: 8px solid transparent; margin-left: 3px; }
+      .eyebrow { margin: 46px 0 13px; color: #477266; font: 600 11px/1.4 "Consolas", monospace; letter-spacing: 1.8px; }
+      h1 { margin: 0 0 18px; font-size: clamp(25px, 6vw, 31px); line-height: 1.4; letter-spacing: -1px; }
+      p { margin: 0; color: #64736f; font-size: 14px; line-height: 1.9; }
+      .state { display: none; }
+      [data-callback-state="idle"] .state-idle, [data-callback-state="received"] .state-received, [data-callback-state="error"] .state-error { display: block; }
+      .notice { margin-top: 28px; padding: 18px 20px; background: #edf5ef; border: 1px solid #dbe9df; border-radius: 12px; color: #2a5749; font-size: 14px; font-weight: 600; line-height: 1.8; }
+      footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e7ebe5; color: #86918b; font-size: 11px; line-height: 1.8; }
+      @media (max-width: 480px) { main { padding: 30px 26px; } .eyebrow { margin-top: 36px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand"><span class="mark" aria-hidden="true"></span>ClipMetric</div>
+      <div class="eyebrow">TIKTOK · AUTHORIZATION CALLBACK</div>
+      <section class="state state-received">
+        <h1>已收到授权回调</h1>
+        <p>这只是回调提示页，不负责确认授权结果。可以关闭本页，返回电脑查看 ClipMetric 的连接状态。</p>
+      </section>
+      <section class="state state-error">
+        <h1>授权尚未完成</h1>
+        <p>本次授权可能已取消或未能完成。请回到电脑查看状态，并在需要时重新发起授权。</p>
+      </section>
+      <section class="state state-idle">
+        <h1>请返回电脑端</h1>
+        <p>这是 ClipMetric 的授权回调提示页。仅打开此页面不代表你已经完成 TikTok 授权。</p>
+      </section>
+      <div class="notice">请回到电脑 ClipMetric；<br>是否授权成功以本机结果为准。</div>
+      <footer>本页不显示授权码或令牌，不向本机或第三方发送授权信息。</footer>
+      <noscript><p>请关闭本页并返回电脑查看结果。浏览器未启用 JavaScript，本页无法清理地址栏中的回调参数；请勿分享完整地址。</p></noscript>
+    </main>
+  </body>
+</html>

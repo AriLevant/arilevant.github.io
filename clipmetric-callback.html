@@ -5,20 +5,84 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="referrer" content="no-referrer">
     <meta name="robots" content="noindex, nofollow, noarchive">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+    <meta name="clipmetric-web-bridge" content="clipmetric-web-bridge-v1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
     <script>
       (function () {
-        var current = new URL(window.location.href);
-        var fragment = new URLSearchParams(current.hash.replace(/^#/, ""));
-        var hasError = current.searchParams.has("error") || fragment.has("error");
-        var hasCode = current.searchParams.has("code") || fragment.has("code");
-        var state = hasError ? "error" : hasCode ? "received" : "idle";
+        'use strict';
+        var query = window.location.search;
+        var fragment = window.location.hash;
+        var pending = null;
+        var pageState = 'idle';
+        var cleaned = false;
         try {
-          window.history.replaceState(null, "", current.pathname);
-        } catch (_) {
-          state = "idle";
+          window.history.replaceState(null, '', window.location.pathname);
+          cleaned = true;
+        } catch (_) {}
+
+        function inspect(search, hash) {
+          var hasQuery = search.length > 1;
+          var hasFragment = hash.length > 1;
+          if (hasQuery && hasFragment) return { view: 'invalid' };
+          var source = hasQuery ? search.slice(1) : hasFragment ? hash.slice(1) : '';
+          if (/%(?![0-9a-f]{2})/i.test(source)) return { view: 'invalid' };
+          // URLSearchParams is the only decoding step. Never decode its values again.
+          var params = new URLSearchParams(source);
+          var fields = ['code', 'state', 'error'];
+          if (fields.some(function (key) { return params.getAll(key).length > 1; })) return { view: 'invalid' };
+          var hasCode = params.has('code');
+          var hasError = params.has('error');
+          if (hasCode && hasError) return { view: 'invalid' };
+          var state = params.get('state');
+          // This prefix is only a routing hint. The local server validates the full state.
+          if (!state || !/^cmweb_[A-Za-z0-9_-]{43}$/.test(state)) {
+            return { view: hasError ? 'error' : hasCode ? 'received' : 'idle' };
+          }
+          if (hasCode) {
+            var code = params.get('code');
+            if (!code || !code.trim() || code.length > 8192 || /[\x00-\x1f\x7f]/.test(code)) return { view: 'invalid' };
+            return { view: 'web-ready', payload: { code: code, state: state } };
+          }
+          if (hasError) {
+            var error = params.get('error');
+            if (!error || !/^[A-Za-z0-9_.-]{1,80}$/.test(error)) return { view: 'invalid' };
+            return { view: 'web-denied', payload: { error: error, state: state } };
+          }
+          return { view: 'invalid' };
         }
-        document.documentElement.dataset.callbackState = state;
+
+        if (cleaned) {
+          var result = inspect(query, fragment);
+          pageState = result.view;
+          pending = result.payload || null;
+          result = null;
+        } else {
+          pageState = 'cleanup-failed';
+        }
+        query = '';
+        fragment = '';
+        document.documentElement.dataset.callbackState = pageState;
+
+        function forget() { pending = null; }
+        window.addEventListener('pagehide', forget, { once: true });
+        document.addEventListener('DOMContentLoaded', function () {
+          var button = document.getElementById('return-to-clipmetric');
+          button.hidden = !pending;
+          button.disabled = !pending;
+          button.addEventListener('click', function () {
+            if (!pending || button.disabled) return;
+            button.disabled = true;
+            var handoff = new URLSearchParams(pending);
+            pending = null;
+            try {
+              // Fixed origin, port and path. No input can choose a destination.
+              window.location.replace('http://127.0.0.1:8787/oauth/return.html#' + handoff.toString());
+            } catch (_) {
+              document.documentElement.dataset.callbackState = 'invalid';
+              button.hidden = true;
+            }
+          });
+        }, { once: true });
       })();
     </script>
     <title>返回 ClipMetric</title>
@@ -26,6 +90,7 @@
     <style>
       :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif; color: #102b3b; background: #eff2ee; }
       * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
       body { min-height: 100vh; min-height: 100svh; margin: 0; display: grid; place-items: center; padding: 28px 20px; background: radial-gradient(ellipse at 20% 10%, #dceee4 0, transparent 55%), #eff2ee; }
       main { width: min(100%, 500px); background: #fffefa; border: 1px solid #d9e2dc; border-radius: 24px; padding: 44px; box-shadow: 0 24px 80px #173a2d0d; }
       .brand { display: flex; align-items: center; gap: 11px; font-size: 20px; font-weight: 700; letter-spacing: -.7px; }
@@ -35,8 +100,13 @@
       h1 { margin: 0 0 18px; font-size: clamp(25px, 6vw, 31px); line-height: 1.4; letter-spacing: -1px; }
       p { margin: 0; color: #64736f; font-size: 14px; line-height: 1.9; }
       .state { display: none; }
-      [data-callback-state="idle"] .state-idle, [data-callback-state="received"] .state-received, [data-callback-state="error"] .state-error { display: block; }
+      [data-callback-state="idle"] .state-idle, [data-callback-state="received"] .state-received, [data-callback-state="error"] .state-error, [data-callback-state="web-ready"] .state-web-ready, [data-callback-state="web-denied"] .state-web-denied, [data-callback-state="invalid"] .state-invalid, [data-callback-state="cleanup-failed"] .state-cleanup-failed { display: block; }
       .notice { margin-top: 28px; padding: 18px 20px; background: #edf5ef; border: 1px solid #dbe9df; border-radius: 12px; color: #2a5749; font-size: 14px; font-weight: 600; line-height: 1.8; }
+      .return-button { display: block; width: 100%; margin-top: 25px; border: 1px solid #173c36; border-radius: 9px; padding: 15px 20px; color: #effff6; background: #173c36; font: 600 14px/1.5 "Segoe UI", "Microsoft YaHei UI", sans-serif; cursor: pointer; }
+      .return-button:hover { background: #285548; }
+      .return-button:focus-visible { outline: 3px solid #83b99c; outline-offset: 4px; }
+      .return-button:disabled { cursor: default; opacity: .55; }
+      .browser-note { margin-top: 19px; font-size: 12px; }
       footer { margin-top: 30px; padding-top: 20px; border-top: 1px solid #e7ebe5; color: #86918b; font-size: 11px; line-height: 1.8; }
       @media (max-width: 480px) { main { padding: 30px 26px; } .eyebrow { margin-top: 36px; } }
     </style>
@@ -57,8 +127,26 @@
         <h1>请返回电脑端</h1>
         <p>这是 ClipMetric 的授权回调提示页。仅打开此页面不代表你已经完成 TikTok 授权。</p>
       </section>
-      <div class="notice">请回到电脑 ClipMetric；<br>是否授权成功以本机结果为准。</div>
-      <footer>本页不显示授权码或令牌，不向本机或第三方发送授权信息。</footer>
+      <section class="state state-web-ready">
+        <h1>将授权结果带回本机</h1>
+        <p>已收到 Web 授权回调。点击下方按钮后，本机程序会校验此次请求并换取令牌；当前页面不代表授权已经成功。</p>
+      </section>
+      <section class="state state-web-denied">
+        <h1>授权未完成</h1>
+        <p>可以点击下方按钮，把本次未完成的结果交回本机。不会自动再次请求授权。</p>
+      </section>
+      <section class="state state-invalid">
+        <h1>无法安全接收这次回调</h1>
+        <p>回调参数缺失、冲突或已使用。本页不会转发参数，请回到 ClipMetric 重新发起 Web 授权。</p>
+      </section>
+      <section class="state state-cleanup-failed">
+        <h1>请关闭这个回调页面</h1>
+        <p>浏览器未能清理地址栏，本页已停止回传。请勿复制、分享完整地址或截图地址栏；关闭本页后返回 ClipMetric。</p>
+      </section>
+      <button class="return-button" id="return-to-clipmetric" type="button" hidden disabled>返回本机 ClipMetric</button>
+      <div class="notice">是否授权成功，以本机 ClipMetric 的结果为准。</div>
+      <p class="browser-note">Web 回传仅适用于发起授权的那台电脑、同一浏览器及同一浏览器配置文件，并要求 ClipMetric 正在运行。手机上的 127.0.0.1 指向手机，不是你的电脑；请勿在手机上点击回传。App 二维码授权无需此按钮，直接回到电脑查看结果。</p>
+      <footer>本页不显示授权码或令牌，也不自动发送授权信息。Web 回调只在你点击按钮后，通过地址片段交给固定本机页面；完整请求仍由本机校验。</footer>
       <noscript><p>请关闭本页并返回电脑查看结果。浏览器未启用 JavaScript，本页无法清理地址栏中的回调参数；请勿分享完整地址。</p></noscript>
     </main>
   </body>

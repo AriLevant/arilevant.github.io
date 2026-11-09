@@ -19,13 +19,14 @@
         if (/%(?![0-9a-f]{2})/i.test(source)) return { view: 'invalid' };
         const params = new URLSearchParams(source);
         if (['auth_code', 'code', 'state', 'error'].some(key => params.getAll(key).length > 1)) return { view: 'invalid' };
-        const state = params.get('state'), hasCode = params.has('auth_code'), hasError = params.has('error');
+        const state = params.get('state'), hasCode = params.has('auth_code') || params.has('code'), hasError = params.has('error');
         if (!state || !/^cmbiz_[A-Za-z0-9_-]{43}$/.test(state) || hasCode === hasError) return { view: 'invalid' };
         if (hasCode) {
-          const code = params.get('auth_code');
+          const code = params.get(params.has('auth_code') ? 'auth_code' : 'code');
           if (!code || !code.trim() || code.length > 8192 || /[\x00-\x1f\x7f]/.test(code)) return { view: 'invalid' };
-          // Some official redirects carry an additional `code`. Only auth_code
-          // belongs to the Accounts token exchange. Never forward other fields.
+          // TikTok's account-holder consent currently returns `code`; older
+          // Accounts redirects use `auth_code`. Normalize at this boundary:
+          // the local receiver and Accounts token endpoint still use auth_code.
           return { view: 'ready', payload: { state, auth_code: code } };
         }
         const error = params.get('error');
@@ -60,7 +61,7 @@
   <section class="state idle"><h1>请从本机工作台发起授权</h1><p>这是 Business Accounts 专用回调页。仅打开本页不代表授权成功。</p></section>
   <section class="state ready"><h1>将授权结果带回本机</h1><p>本页已接收账号授权回调。点击后，本机才会校验请求并换取令牌；当前不代表授权已完成。</p></section>
   <section class="state denied"><h1>本次授权未完成</h1><p>点击下方按钮返回本机查看状态，不会自动重试授权。</p></section>
-  <section class="state invalid"><h1>无法安全接收这次回调</h1><p>参数无效、流程不匹配或已使用；请关闭本页并从 ClipMetric 重新发起 Business 授权。</p></section>
+  <section class="state invalid"><h1>未能接收这次授权结果</h1><p>回调缺少有效的授权结果或请求标识。请返回 ClipMetric，取消待完成的授权后重新连接账号。</p></section>
   <section class="state cleanup-failed"><h1>请关闭这个页面</h1><p>浏览器无法清理回调地址，已停止回传。请勿复制、分享完整网址或截图地址栏。</p></section>
   <button id="return-to-clipmetric" type="button" hidden disabled>返回本机 ClipMetric</button>
   <p class="note">仅适用于发起授权的同一台电脑和同一浏览器。手机上的 127.0.0.1 指向手机，不能返回你的电脑。</p>

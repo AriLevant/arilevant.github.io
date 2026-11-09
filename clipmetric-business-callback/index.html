@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="zh-CN" data-callback-state="idle">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow, noarchive">
+  <meta name="clipmetric-business-bridge" content="clipmetric-business-bridge-v1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+  <script>
+    (() => {
+      'use strict';
+      let query = window.location.search, fragment = window.location.hash, pending = null, view = 'idle', cleaned = false;
+      try { window.history.replaceState(null, '', window.location.pathname); cleaned = true; } catch {}
+      function inspect(search, hash) {
+        if (search.length > 1 && hash.length > 1) return { view: 'invalid' };
+        const source = search.length > 1 ? search.slice(1) : hash.length > 1 ? hash.slice(1) : '';
+        if (!source) return { view: 'idle' };
+        if (/%(?![0-9a-f]{2})/i.test(source)) return { view: 'invalid' };
+        const params = new URLSearchParams(source);
+        if (['auth_code', 'code', 'state', 'error'].some(key => params.getAll(key).length > 1)) return { view: 'invalid' };
+        const state = params.get('state'), hasCode = params.has('auth_code'), hasError = params.has('error');
+        if (!state || !/^cmbiz_[A-Za-z0-9_-]{43}$/.test(state) || hasCode === hasError) return { view: 'invalid' };
+        if (hasCode) {
+          const code = params.get('auth_code');
+          if (!code || !code.trim() || code.length > 8192 || /[\x00-\x1f\x7f]/.test(code)) return { view: 'invalid' };
+          // Some official redirects carry an additional `code`. Only auth_code
+          // belongs to the Accounts token exchange. Never forward other fields.
+          return { view: 'ready', payload: { state, auth_code: code } };
+        }
+        const error = params.get('error');
+        if (!error || !/^[A-Za-z0-9_.-]{1,80}$/.test(error)) return { view: 'invalid' };
+        return { view: 'denied', payload: { state, error } };
+      }
+      if (cleaned) { const result = inspect(query, fragment); view = result.view; pending = result.payload || null; }
+      else view = 'cleanup-failed';
+      query = ''; fragment = '';
+      document.documentElement.dataset.callbackState = view;
+      window.addEventListener('pagehide', () => { pending = null; }, { once: true });
+      document.addEventListener('DOMContentLoaded', () => {
+        const button = document.getElementById('return-to-clipmetric');
+        button.hidden = !pending; button.disabled = !pending;
+        button.addEventListener('click', () => {
+          if (!pending || button.disabled) return;
+          button.disabled = true;
+          const handoff = new URLSearchParams(pending); pending = null;
+          try { window.location.replace('http://127.0.0.1:8787/oauth/business-return.html#' + handoff.toString()); }
+          catch { document.documentElement.dataset.callbackState = 'invalid'; button.hidden = true; }
+        });
+      }, { once: true });
+    })();
+  </script>
+  <title>返回 ClipMetric · Business Accounts</title>
+  <style>
+    :root{color-scheme:light;color:#102b3b;background:#eff2ee;font:15px/1.8 "Segoe UI","Microsoft YaHei UI",sans-serif}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px}main{max-width:520px;background:#fffefa;border:1px solid #d9e2dc;border-radius:24px;padding:40px}header{font-size:22px;font-weight:700}.eyebrow{font:11px/1.5 Consolas,monospace;letter-spacing:2px;color:#477266;margin-top:36px}h1{font-size:27px;line-height:1.4}p{color:#64736f}.state{display:none}[data-callback-state="idle"] .idle,[data-callback-state="ready"] .ready,[data-callback-state="denied"] .denied,[data-callback-state="invalid"] .invalid,[data-callback-state="cleanup-failed"] .cleanup-failed{display:block}button{width:100%;padding:15px;border:1px solid #173c36;border-radius:9px;background:#173c36;color:#effff6;font:600 15px "Segoe UI",sans-serif;cursor:pointer}button:focus-visible{outline:3px solid #83b99c;outline-offset:4px}.note{padding:16px;background:#edf5ef;border-radius:12px}footer{font-size:12px;border-top:1px solid #e7ebe5;padding-top:20px;margin-top:25px}@media(max-width:480px){main{padding:26px}}
+  </style>
+</head>
+<body><main>
+  <header>ClipMetric</header><div class="eyebrow">BUSINESS ACCOUNTS · CALLBACK</div>
+  <section class="state idle"><h1>请从本机工作台发起授权</h1><p>这是 Business Accounts 专用回调页。仅打开本页不代表授权成功。</p></section>
+  <section class="state ready"><h1>将授权结果带回本机</h1><p>本页已接收账号授权回调。点击后，本机才会校验请求并换取令牌；当前不代表授权已完成。</p></section>
+  <section class="state denied"><h1>本次授权未完成</h1><p>点击下方按钮返回本机查看状态，不会自动重试授权。</p></section>
+  <section class="state invalid"><h1>无法安全接收这次回调</h1><p>参数无效、流程不匹配或已使用；请关闭本页并从 ClipMetric 重新发起 Business 授权。</p></section>
+  <section class="state cleanup-failed"><h1>请关闭这个页面</h1><p>浏览器无法清理回调地址，已停止回传。请勿复制、分享完整网址或截图地址栏。</p></section>
+  <button id="return-to-clipmetric" type="button" hidden disabled>返回本机 ClipMetric</button>
+  <p class="note">仅适用于发起授权的同一台电脑和同一浏览器。手机上的 127.0.0.1 指向手机，不能返回你的电脑。</p>
+  <footer>本页不显示授权码，不保存令牌，不自动发送回调数据。你点击后才经 fragment 返回固定本机页面。是否授权成功以工作台为准。</footer>
+  <noscript><p>请启用 JavaScript 后重新发起授权；未能清理的完整地址不可分享。</p></noscript>
+</main></body>
+</html>
